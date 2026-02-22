@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Retro Mono Pro - Fine Grain</title>
+    <title>Retro Mono Pro - Film Grain Fix</title>
     <style>
         :root { 
             --accent: #d4a017;
@@ -20,9 +20,11 @@
             position: fixed; width: 100%;
         }
 
-        /* 强制画布使用邻近算法显示 */
+        /* 优化：使用针对单色高对比优化的渲染属性 */
         canvas { 
             width: 100%; height: 100%; object-fit: cover; 
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-optimize-contrast;
             image-rendering: pixelated; 
             image-rendering: crisp-edges;
         }
@@ -128,8 +130,8 @@
         <div class="control-item"><label>高光染色</label><input type="color" id="fgColor" value="#ffce00"></div>
         <div class="control-item"><label>暗部沉淀</label><input type="color" id="bgColor" value="#000000"></div>
         <div class="control-item full-row">
-            <label>银盐颗粒 (细腻质感)</label>
-            <input type="range" id="noiseAmt" min="0" max="100" value="30">
+            <label>银盐颗粒 (胶片结晶感)</label>
+            <input type="range" id="noiseAmt" min="0" max="80" value="25">
         </div>
     </div>
 
@@ -141,11 +143,9 @@
 <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const ctx = canvas.getContext('2d', { willReadFrequently: true, alpha: false });
     
-    // 强制全局使用邻近算法，禁止模糊插值
     ctx.imageSmoothingEnabled = false;
-
     let currentZoom = 1.0;
 
     async function startCamera() {
@@ -188,31 +188,33 @@
         return lut;
     }
 
+    // 核心修复：细腻颗粒处理函数
     function processFrame() {
         if (video.paused || video.ended) return;
         
-        if (canvas.width !== canvas.clientWidth) {
-            canvas.width = canvas.clientWidth;
-            canvas.height = canvas.clientHeight;
+        // 保持低分辨率处理，但在显示时使用邻近算法放大，这能产生厚实的颗粒
+        // 如果处理分辨率太高，噪点会细碎到看不清，变成数码杂色
+        const processWidth = 540; 
+        const processHeight = 960;
+
+        if (canvas.width !== processWidth) {
+            canvas.width = processWidth;
+            canvas.height = processHeight;
         }
 
         const vW = video.videoWidth, vH = video.videoHeight;
-        const cW = canvas.width, cH = canvas.height;
         if (vW === 0) { requestAnimationFrame(processFrame); return; }
 
-        const vRatio = vW / vH, cRatio = cW / cH;
-        let sw, sh;
-        if (vRatio > cRatio) { sw = vH * cRatio; sh = vH; } else { sw = vW; sh = vW / cRatio; }
-
-        sw /= currentZoom; sh /= currentZoom;
+        const sw = (vH * (processWidth / processHeight)) / currentZoom;
+        const sh = vH / currentZoom;
         const sx = (vW - sw) / 2, sy = (vH - sh) / 2;
 
-        // 基础绘制
         ctx.filter = 'grayscale(1)';
-        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cW, cH);
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, processWidth, processHeight);
         
-        const imgData = ctx.getImageData(0, 0, cW, cH);
+        const imgData = ctx.getImageData(0, 0, processWidth, processHeight);
         const pixels = imgData.data;
+        
         const threshold = parseInt(document.getElementById('threshold').value);
         const noiseAmt = parseInt(document.getElementById('noiseAmt').value);
         const eqAmount = parseInt(document.getElementById('eqAmount').value) / 100;
@@ -224,9 +226,11 @@
             const gray = pixels[i];
             const val = gray * (1 - eqAmount) + lut[gray] * eqAmount;
             
-            // 优化：细腻化噪点算法
-            // 使用正态分布感官模拟：颗粒不再是生硬的0/1跳变，而是基于亮度的微扰动
-            const grain = (Math.random() - 0.5) * noiseAmt;
+            // 修复算法：模拟银盐团簇
+            // 颗粒量受亮度影响（模拟真实感光乳剂）
+            const brightnessFactor = 1.0 - Math.abs(val - 128) / 128; 
+            const grain = (Math.random() - 0.5) * noiseAmt * (1 + brightnessFactor);
+            
             const isBright = (val + grain) > threshold;
             
             pixels[i]   = isBright ? fg.r : bg.r;
@@ -240,16 +244,16 @@
     }
 
     document.getElementById('captureBtn').onclick = () => {
-        // 创建临时画布以确保导出也严格遵循邻近算法
         const outCanvas = document.createElement('canvas');
+        // 导出时使用原始画面比例，确保画质
         outCanvas.width = canvas.width;
         outCanvas.height = canvas.height;
         const outCtx = outCanvas.getContext('2d');
-        outCtx.imageSmoothingEnabled = false; // 导出强制邻近
+        outCtx.imageSmoothingEnabled = false; 
         outCtx.drawImage(canvas, 0, 0);
         
         const link = document.createElement('a');
-        link.download = `RetroMono_Pure_${Date.now()}.png`;
+        link.download = `RetroMono_${Date.now()}.png`;
         link.href = outCanvas.toDataURL('image/png');
         link.click();
     };
