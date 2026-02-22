@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Retro Cam v2 - High Contrast</title>
+    <title>复古高对比相机 v2</title>
     <style>
-        body { background: #000; color: #eee; font-family: -apple-system, sans-serif; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; }
+        body { background: #000; color: #eee; font-family: -apple-system, "Helvetica Neue", "PingFang SC", sans-serif; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; }
         
         /* 覆盖层：初始权限请求 */
         #permissionOverlay {
@@ -18,38 +18,41 @@
         
         .ui-overlay { 
             position: absolute; bottom: 0; left: 0; right: 0; 
-            background: rgba(0,0,0,0.8); backdrop-filter: blur(15px);
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(15px);
             padding: 15px; border-top: 1px solid #333;
-            display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
             padding-bottom: env(safe-area-inset-bottom);
         }
 
         .control-group { text-align: left; }
-        label { font-size: 9px; color: #888; display: block; margin-bottom: 4px; text-transform: uppercase; font-weight: bold; }
+        label { font-size: 11px; color: #aaa; display: block; margin-bottom: 5px; font-weight: bold; letter-spacing: 1px; }
         
         input[type="range"] { width: 100%; accent-color: #ff4500; height: 20px; margin: 0; }
-        input[type="color"] { background: none; border: 1px solid #444; width: 100%; height: 25px; border-radius: 4px; }
+        input[type="color"] { background: none; border: 1px solid #444; width: 100%; height: 28px; border-radius: 4px; padding: 2px; }
 
         .btn-main { 
-            background: #fff; color: #000; border: none; padding: 15px 30px;
-            font-weight: bold; border-radius: 30px; font-size: 14px; cursor: pointer;
+            background: #fff; color: #000; border: none; padding: 15px 40px;
+            font-weight: bold; border-radius: 30px; font-size: 16px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255,255,255,0.2);
         }
 
         .btn-capture { 
             grid-column: span 2; background: #ff4500; color: #fff; border: none; 
-            padding: 12px; font-weight: bold; border-radius: 8px; font-size: 13px; margin-top: 5px;
+            padding: 14px; font-weight: bold; border-radius: 8px; font-size: 14px; margin-top: 5px;
+            cursor: pointer; transition: opacity 0.2s;
         }
+        .btn-capture:active { opacity: 0.7; }
         
         video { display: none; }
-        .error-msg { color: #ff4444; font-size: 12px; margin-top: 20px; max-width: 80%; }
+        .error-msg { color: #ff4444; font-size: 13px; margin-top: 20px; max-width: 80%; line-height: 1.5; }
     </style>
 </head>
 <body>
 
 <div id="permissionOverlay">
-    <h2 style="margin-bottom: 10px;">Retro High-Contrast Cam</h2>
-    <p style="color: #666; font-size: 13px; margin-bottom: 30px;">需要摄像头权限以实现实时滤镜效果<br>(请确保处于 HTTPS 环境)</p>
-    <button class="btn-main" onclick="startCamera()">开启摄像头 / START CAMERA</button>
+    <h2 style="margin-bottom: 10px; letter-spacing: 2px;">复古高对比相机</h2>
+    <p style="color: #888; font-size: 14px; margin-bottom: 30px; line-height: 1.6;">需要摄像头权限以实现实时滤镜效果<br><small>(请确保在 HTTPS 环境下运行)</small></p>
+    <button class="btn-main" onclick="startCamera()">开启摄像头</button>
     <div id="errorLog" class="error-msg"></div>
 </div>
 
@@ -58,30 +61,30 @@
 
 <div class="ui-overlay">
     <div class="control-group">
-        <label>Light Color</label>
+        <label>亮部颜色</label>
         <input type="color" id="fgColor" value="#ffce00">
     </div>
     <div class="control-group">
-        <label>Dark Color</label>
+        <label>暗部颜色</label>
         <input type="color" id="bgColor" value="#000000">
     </div>
 
     <div class="control-group">
-        <label>Face Detail (HE)</label>
+        <label>面部细节 (均衡)</label>
         <input type="range" id="eqAmount" min="0" max="100" value="75">
     </div>
 
     <div class="control-group">
-        <label>Exposure</label>
+        <label>曝光阈值</label>
         <input type="range" id="threshold" min="0" max="255" value="128">
     </div>
 
     <div class="control-group" style="grid-column: span 2;">
-        <label>Film Grain</label>
+        <label>胶片颗粒感</label>
         <input type="range" id="noiseAmt" min="0" max="150" value="45">
     </div>
 
-    <button id="captureBtn" class="btn-capture">SAVE PHOTO TO ALBUM</button>
+    <button id="captureBtn" class="btn-capture">保存照片到相册</button>
 </div>
 
 <script>
@@ -92,7 +95,7 @@
     const overlay = document.getElementById('permissionOverlay');
     
     async function startCamera() {
-        errorLog.innerText = "请求中...";
+        errorLog.innerText = "正在请求摄像头权限...";
         
         const constraints = {
             video: { 
@@ -108,7 +111,7 @@
             video.srcObject = stream;
             
             video.onloadedmetadata = () => {
-                overlay.style.display = 'none'; // 成功后隐藏遮罩
+                overlay.style.display = 'none'; 
                 video.play();
                 requestAnimationFrame(processFrame);
             };
@@ -116,9 +119,11 @@
             console.error(err);
             let msg = "访问失败: ";
             if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                msg += "必须使用 HTTPS 安全链接才能调用摄像头。";
-            } else if (err.name === 'NotAllowedError') {
-                msg += "您拒绝了摄像头访问权限，请在浏览器设置中开启。";
+                msg += "出于浏览器安全限制，必须使用 HTTPS 链接才能调用摄像头。";
+            } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                msg += "您拒绝了摄像头访问权限，请在浏览器地址栏或设置中开启权限后刷新页面。";
+            } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                msg += "未检测到可用的摄像头设备。";
             } else {
                 msg += err.message;
             }
@@ -164,7 +169,6 @@
         const cW = canvas.width;
         const cH = canvas.height;
 
-        // 居中裁剪绘制
         const vRatio = vW / vH;
         const cRatio = cW / cH;
         let sx, sy, sw, sh;
@@ -209,7 +213,7 @@
     document.getElementById('captureBtn').onclick = () => {
         const dataUrl = canvas.toDataURL('image/png');
         const link = document.createElement('a');
-        link.download = `retro_snap_${Date.now()}.png`;
+        link.download = `复古相机照片_${Date.now()}.png`;
         link.href = dataUrl;
         link.click();
     };
