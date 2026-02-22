@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Retro Mono Pro - Professional</title>
+    <title>Retro Mono Pro - Fine Grain</title>
     <style>
         :root { 
             --accent: #d4a017;
@@ -18,6 +18,13 @@
             overflow: hidden; height: 100svh; 
             display: flex; flex-direction: column;
             position: fixed; width: 100%;
+        }
+
+        /* 强制画布使用邻近算法显示 */
+        canvas { 
+            width: 100%; height: 100%; object-fit: cover; 
+            image-rendering: pixelated; 
+            image-rendering: crisp-edges;
         }
 
         #permissionOverlay {
@@ -39,7 +46,6 @@
             border: 2px solid #1a1a1a; overflow: hidden; background: #050505;
             box-shadow: 0 0 30px rgba(0,0,0,1);
         }
-        canvas { width: 100%; height: 100%; object-fit: cover; }
 
         .ui-panel {
             background: var(--leather); padding: 12px 15px;
@@ -53,8 +59,8 @@
             border-radius: 6px; padding: 6px 3px; 
         }
         .f-item { flex: 1; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
-        .f-btn { background: none; border: none; color: #555; font-size: 13px; font-weight: bold; padding: 2px 0; transition: 0.2s; }
-        .f-desc { font-size: 11px; color: #444; font-weight: 500; margin-top: 2px; transition: 0.2s; }
+        .f-btn { background: none; border: none; color: #555; font-size: 13px; font-weight: bold; padding: 2px 0; }
+        .f-desc { font-size: 11px; color: #444; font-weight: 500; margin-top: 2px; }
         
         .f-item.active .f-btn { color: var(--accent); }
         .f-item.active .f-desc { color: var(--accent); }
@@ -83,7 +89,7 @@
 <body>
 
 <div id="permissionOverlay">
-    <h1 style="letter-spacing: 4px; color: var(--accent); font-size: 18px;">RETRO MONO</h1>
+    <h1 style="letter-spacing: 4px; color: var(--accent); font-size: 18px;">RETRO MONO PRO</h1>
     <button class="start-btn" onclick="startCamera()">激活光学传感器</button>
 </div>
 
@@ -122,8 +128,8 @@
         <div class="control-item"><label>高光染色</label><input type="color" id="fgColor" value="#ffce00"></div>
         <div class="control-item"><label>暗部沉淀</label><input type="color" id="bgColor" value="#000000"></div>
         <div class="control-item full-row">
-            <label>银盐颗粒 (胶片质感)</label>
-            <input type="range" id="noiseAmt" min="0" max="150" value="45">
+            <label>银盐颗粒 (细腻质感)</label>
+            <input type="range" id="noiseAmt" min="0" max="100" value="30">
         </div>
     </div>
 
@@ -136,17 +142,16 @@
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    // 强制全局使用邻近算法，禁止模糊插值
+    ctx.imageSmoothingEnabled = false;
+
     let currentZoom = 1.0;
 
     async function startCamera() {
         const constraints = {
-            video: {
-                facingMode: 'environment',
-                width: { ideal: 1280 }, 
-                height: { ideal: 720 }
-            }
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
         };
-
         try {
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = stream;
@@ -156,7 +161,7 @@
                 requestAnimationFrame(processFrame);
             };
         } catch (err) {
-            alert("相机启动失败。请确保使用 HTTPS 环境并授予摄像头权限。");
+            alert("启动失败：请检查 HTTPS 环境。");
         }
     }
 
@@ -172,7 +177,6 @@
         return { r, g, b };
     }
 
-    // 补回直方图均衡化逻辑
     function getEqualizedLut(pixels) {
         let hist = new Int32Array(256);
         for (let i = 0; i < pixels.length; i += 4) hist[pixels[i]]++; 
@@ -186,6 +190,7 @@
 
     function processFrame() {
         if (video.paused || video.ended) return;
+        
         if (canvas.width !== canvas.clientWidth) {
             canvas.width = canvas.clientWidth;
             canvas.height = canvas.clientHeight;
@@ -202,13 +207,12 @@
         sw /= currentZoom; sh /= currentZoom;
         const sx = (vW - sw) / 2, sy = (vH - sh) / 2;
 
+        // 基础绘制
         ctx.filter = 'grayscale(1)';
         ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cW, cH);
         
         const imgData = ctx.getImageData(0, 0, cW, cH);
         const pixels = imgData.data;
-        
-        // 获取所有控制值
         const threshold = parseInt(document.getElementById('threshold').value);
         const noiseAmt = parseInt(document.getElementById('noiseAmt').value);
         const eqAmount = parseInt(document.getElementById('eqAmount').value) / 100;
@@ -216,13 +220,14 @@
         const bg = hexToRgb(document.getElementById('bgColor').value);
         const lut = getEqualizedLut(pixels);
 
-        // 补回带有银盐颗粒的处理循环
         for (let i = 0; i < pixels.length; i += 4) {
             const gray = pixels[i];
-            // 混合细节增强
             const val = gray * (1 - eqAmount) + lut[gray] * eqAmount;
-            // 叠加银盐颗粒随机噪声后判断阈值
-            const isBright = (val + (Math.random() - 0.5) * noiseAmt) > threshold;
+            
+            // 优化：细腻化噪点算法
+            // 使用正态分布感官模拟：颗粒不再是生硬的0/1跳变，而是基于亮度的微扰动
+            const grain = (Math.random() - 0.5) * noiseAmt;
+            const isBright = (val + grain) > threshold;
             
             pixels[i]   = isBright ? fg.r : bg.r;
             pixels[i+1] = isBright ? fg.g : bg.g;
@@ -235,9 +240,17 @@
     }
 
     document.getElementById('captureBtn').onclick = () => {
+        // 创建临时画布以确保导出也严格遵循邻近算法
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = canvas.width;
+        outCanvas.height = canvas.height;
+        const outCtx = outCanvas.getContext('2d');
+        outCtx.imageSmoothingEnabled = false; // 导出强制邻近
+        outCtx.drawImage(canvas, 0, 0);
+        
         const link = document.createElement('a');
-        link.download = `RetroMono_${Date.now()}.png`;
-        link.href = canvas.toDataURL('image/png');
+        link.download = `RetroMono_Pure_${Date.now()}.png`;
+        link.href = outCanvas.toDataURL('image/png');
         link.click();
     };
 </script>
